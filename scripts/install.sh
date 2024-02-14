@@ -199,7 +199,7 @@ if [[ "$OS" == "Linux" ]]; then
     echo "python3-pip"
     echo "bittensor"
 
-    wait_for_user
+    #wait_for_user
     linux_install_pre
     linux_install_python
     linux_update_pip
