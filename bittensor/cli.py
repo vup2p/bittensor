@@ -20,7 +20,57 @@ import shtab
 import argparse
 import bittensor
 from typing import List, Optional
-from .commands import *
+from .commands import (
+    AutocompleteCommand,
+    DelegateStakeCommand,
+    DelegateUnstakeCommand,
+    GetIdentityCommand,
+    GetWalletHistoryCommand,
+    InspectCommand,
+    ListCommand,
+    ListDelegatesCommand,
+    MetagraphCommand,
+    MyDelegatesCommand,
+    NewColdkeyCommand,
+    NewHotkeyCommand,
+    NominateCommand,
+    OverviewCommand,
+    PowRegisterCommand,
+    ProposalsCommand,
+    RegenColdkeyCommand,
+    RegenColdkeypubCommand,
+    RegenHotkeyCommand,
+    RegisterCommand,
+    RegisterSubnetworkCommand,
+    RootGetWeightsCommand,
+    RootList,
+    RootRegisterCommand,
+    RootSetBoostCommand,
+    RootSetSlashCommand,
+    RootSetWeightsCommand,
+    RunFaucetCommand,
+    SenateCommand,
+    SetIdentityCommand,
+    SetTakeCommand,
+    StakeCommand,
+    StakeShow,
+    SubnetGetHyperparamsCommand,
+    SubnetHyperparamsCommand,
+    SubnetListCommand,
+    SubnetLockCostCommand,
+    SubnetSudoCommand,
+    SwapHotkeyCommand,
+    TransferCommand,
+    UnStakeCommand,
+    UpdateCommand,
+    UpdateWalletCommand,
+    VoteCommand,
+    WalletBalanceCommand,
+    WalletCreateCommand,
+    CommitWeightCommand,
+    RevealWeightCommand,
+    CheckColdKeySwapCommand,
+)
 
 # Create a console instance for CLI display.
 console = bittensor.__console__
@@ -45,6 +95,9 @@ ALIAS_TO_COMMAND = {
     "sudos": "sudo",
     "i": "info",
     "info": "info",
+    "weights": "weights",
+    "wt": "weights",
+    "weight": "weights",
 }
 COMMANDS = {
     "subnets": {
@@ -75,6 +128,7 @@ COMMANDS = {
             "senate": SenateCommand,
             "register": RootRegisterCommand,
             "proposals": ProposalsCommand,
+            "set_take": SetTakeCommand,
             "delegate": DelegateStakeCommand,
             "undelegate": DelegateUnstakeCommand,
             "my_delegates": MyDelegatesCommand,
@@ -104,6 +158,7 @@ COMMANDS = {
             "set_identity": SetIdentityCommand,
             "get_identity": GetIdentityCommand,
             "history": GetWalletHistoryCommand,
+            "check_coldkey_swap": CheckColdKeySwapCommand,
         },
     },
     "stake": {
@@ -114,6 +169,15 @@ COMMANDS = {
             "show": StakeShow,
             "add": StakeCommand,
             "remove": UnStakeCommand,
+        },
+    },
+    "weights": {
+        "name": "weights",
+        "aliases": ["wt", "weight"],
+        "help": "Commands for managing weight for subnets.",
+        "commands": {
+            "commit": CommitWeightCommand,
+            "reveal": RevealWeightCommand,
         },
     },
     "sudo": {
@@ -182,7 +246,7 @@ class cli:
         bittensor.turn_console_on()
 
         # If no config is provided, create a new one from args.
-        if config == None:
+        if config is None:
             config = cli.create_config(args)
 
         self.config = config
@@ -200,8 +264,8 @@ class cli:
         # If no_version_checking is not set or set as False in the config, version checking is done.
         if not self.config.get("no_version_checking", d=True):
             try:
-                bittensor.utils.version_checking()
-            except:
+                bittensor.utils.check_version()
+            except bittensor.utils.VersionCheckError:
                 # If version checking fails, inform user with an exception.
                 raise RuntimeError(
                     "To avoid internet-based version checking, pass --no_version_checking while running the CLI."
@@ -283,7 +347,7 @@ class cli:
             command_data = COMMANDS[command]
 
             if isinstance(command_data, dict):
-                if config["subcommand"] != None:
+                if config["subcommand"] is not None:
                     command_data["commands"][config["subcommand"]].check_config(config)
                 else:
                     console.print(
@@ -302,6 +366,7 @@ class cli:
         """
         # Check for print-completion argument
         if self.config.print_completion:
+            parser = cli.__create_parser__()
             shell = self.config.print_completion
             print(shtab.complete(parser, shell))
             return

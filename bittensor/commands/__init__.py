@@ -77,6 +77,7 @@ from .delegates import (
     DelegateStakeCommand,
     DelegateUnstakeCommand,
     MyDelegatesCommand,
+    SetTakeCommand,
 )
 from .wallets import (
     NewColdkeyCommand,
@@ -89,6 +90,7 @@ from .wallets import (
     WalletBalanceCommand,
     GetWalletHistoryCommand,
 )
+from .weights import CommitWeightCommand, RevealWeightCommand
 from .transfer import TransferCommand
 from .inspect import InspectCommand
 from .metagraph import MetagraphCommand
@@ -119,3 +121,4 @@ from .root import (
     RootSetSlashCommand,
 )
 from .identity import GetIdentityCommand, SetIdentityCommand
+from .check_coldkey_swap import CheckColdKeySwapCommand

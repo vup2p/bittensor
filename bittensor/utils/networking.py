@@ -1,5 +1,4 @@
-""" Utils for handling local network with ip and ports.
-"""
+"""Utils for handling local network with ip and ports."""
 
 # The MIT License (MIT)
 # Copyright © 2021-2022 Yuma Rao
@@ -20,13 +19,14 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
+# Standard Lib
 import os
 import urllib
 import json
 import netaddr
-import requests
 
-from loguru import logger
+# 3rd party
+import requests
 
 
 def int_to_ip(int_val: int) -> str:

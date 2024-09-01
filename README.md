@@ -221,6 +221,11 @@ source ~/.bashrc  # Reload Bash configuration to take effect
 # The Bittensor Package
 The bittensor package contains data structures for interacting with the bittensor ecosystem, writing miners, validators and querying the network. Additionally, it provides many utilities for efficient serialization of Tensors over the wire, performing data analysis of the network, and other useful utilities.
 
+In the 7.0.0 release, we have removed `torch` by default. However, you can still use `torch` by setting the environment variable
+`USE_TORCH=1` and making sure that you have installed the `torch` library. 
+You can install `torch` by running `pip install bittensor[torch]` (if installing via PyPI), or by running `pip install -e ".[torch]"` (if installing from source). 
+We will not be adding any new functionality based on torch.
+
 Wallet: Interface over locally stored bittensor hot + coldkey styled wallets. 
 ```python
 import bittensor
@@ -273,7 +278,7 @@ Synapse: Responsible for defining the protocol definition between axon servers a
 ```python
 class Topk( bittensor.Synapse ):
     topk: int = 2  # Number of "top" elements to select
-    input: bittensor.Tensor = pydantic.Field(..., allow_mutation=False)  # Ensure that input cannot be set on the server side. 
+    input: bittensor.Tensor = pydantic.Field(..., frozen=True)  # Ensure that input cannot be set on the server side. 
     v: bittensor.Tensor = None
     i: bittensor.Tensor = None
 
@@ -329,8 +334,8 @@ my_axon.attach(
 ).start()
 ```     
 
-Dendrite: Inheriting from PyTorch's Module class, represents the abstracted implementation of a network client module designed 
-to send requests to those endpoints to receive inputs.
+Dendrite: Represents the abstracted implementation of a network client module
+designed to send requests to those endpoints to receive inputs.
 
 Example:
 ```python
@@ -368,6 +373,45 @@ Do you want to set the following root weights?:
 y
 
 ⠏ 📡 Setting root weights on test ...
+```
+
+## Bittensor Subnets API
+
+This guide provides instructions on how to extend the Bittensor Subnets API, a powerful interface for interacting with the Bittensor network across subnets. The Bittensor Subnets API facilitates querying across any subnet that has exposed API endpoints to unlock utility of the Bittensor decentralized network.
+
+The Bittensor Subnets API consists of abstract classes and a registry system to dynamically handle API interactions. It allows developers to implement custom logic for storing and retrieving data, while also providing a straightforward way for end users to interact with these functionalities.
+
+### Core Components
+
+- **APIRegistry**: A central registry that manages API handlers. It allows for dynamic retrieval of handlers based on keys.
+- **SubnetsAPI (Abstract Base Class)**: Defines the structure for API implementations, including methods for querying the network and processing responses.
+- **StoreUserAPI & RetrieveUserAPI**: Concrete implementations of the `SubnetsAPI` for storing and retrieving user data.
+
+### Implementing Custom Subnet APIs
+
+To implement your own subclasses of `bittensor.SubnetsAPI` to integrate an API into your subnet.
+
+1. **Inherit from `SubnetsAPI`**: Your class should inherit from the `SubnetsAPI` abstract base class.
+
+2. **Implement Required Methods**: Implement the `prepare_synapse` and `process_responses` abstract methods with your custom logic.
+
+That's it! For example:
+
+```python
+import bittensor
+
+class CustomSubnetAPI(bittensor.SubnetsAPI):
+    def __init__(self, wallet: "bittensor.wallet"):
+        super().__init__(wallet)
+        # Custom initialization here
+
+    def prepare_synapse(self, *args, **kwargs):
+        # Custom synapse preparation logic
+        pass
+
+    def process_responses(self, responses):
+        # Custom response processing logic
+        pass
 ```
 
 ## Release

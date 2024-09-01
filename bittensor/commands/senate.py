@@ -15,13 +15,12 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-import sys
+
 import argparse
 import bittensor
 from rich.prompt import Prompt, Confirm
 from rich.table import Table
-from rich.console import Console
-from typing import List, Union, Optional, Dict, Tuple
+from typing import Optional, Dict
 from .utils import get_delegates_details, DelegatesDetails
 from . import defaults
 
@@ -212,9 +211,9 @@ class ProposalsCommand:
         senate_members = subtensor.get_senate_members()
         proposals = subtensor.get_proposals()
 
-        registered_delegate_info: Optional[
-            Dict[str, DelegatesDetails]
-        ] = get_delegates_details(url=bittensor.__delegates_details_url__)
+        registered_delegate_info: Optional[Dict[str, DelegatesDetails]] = (
+            get_delegates_details(url=bittensor.__delegates_details_url__)
+        )
 
         table = Table(show_footer=False)
         table.title = (
@@ -343,9 +342,9 @@ class ShowVotesCommand:
             console.print(":cross_mark: [red]Failed[/red]: Proposal not found.")
             return
 
-        registered_delegate_info: Optional[
-            Dict[str, DelegatesDetails]
-        ] = get_delegates_details(url=bittensor.__delegates_details_url__)
+        registered_delegate_info: Optional[Dict[str, DelegatesDetails]] = (
+            get_delegates_details(url=bittensor.__delegates_details_url__)
+        )
 
         table = Table(show_footer=False)
         table.title = "[white]Votes for Proposal {}".format(proposal_hash)

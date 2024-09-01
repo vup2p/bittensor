@@ -17,11 +17,10 @@
 
 import argparse
 import bittensor
-from rich.prompt import Prompt
 from rich.table import Table
 from .utils import check_netuid_set
 
-console = bittensor.__console__
+console = bittensor.__console__  # type: ignore
 
 
 class MetagraphCommand:
@@ -160,8 +159,8 @@ class MetagraphCommand:
             style="yellow",
         )
         table.add_column(
-            "[overline white]STAKE(\u03C4)",
-            "\u03C4{:.5f}".format(total_stake),
+            "[overline white]STAKE(\u03c4)",
+            "\u03c4{:.5f}".format(total_stake),
             footer_style="overline white",
             justify="right",
             style="green",
@@ -208,8 +207,8 @@ class MetagraphCommand:
             no_wrap=True,
         )
         table.add_column(
-            "[overline white]EMISSION(\u03C1)",
-            "\u03C1{}".format(int(total_emission)),
+            "[overline white]EMISSION(\u03c1)",
+            "\u03c1{}".format(int(total_emission)),
             footer_style="overline white",
             justify="right",
             style="green",
@@ -260,6 +259,13 @@ class MetagraphCommand:
             dest="netuid",
             type=int,
             help="""Set the netuid to get the metagraph of""",
+            default=False,
+        )
+        metagraph_parser.add_argument(
+            "--no_prompt",
+            dest="no_prompt",
+            action="store_true",
+            help="""Set true to avoid prompting the user.""",
             default=False,
         )
 

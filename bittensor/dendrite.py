@@ -22,16 +22,17 @@ from __future__ import annotations
 import asyncio
 import uuid
 import time
-import torch
 import aiohttp
+from aiohttp import ClientTimeout
+
 import bittensor
-from fastapi import Response
-from typing import Union, Optional, List, Union, AsyncGenerator, Any
+from typing import Optional, List, Union, AsyncGenerator, Any
+from bittensor.utils.registration import torch, use_torch
 
 
-class dendrite(torch.nn.Module):
+class DendriteMixin:
     """
-    The Dendrite class, inheriting from PyTorch's Module class, represents the abstracted implementation of a network client module.
+    The Dendrite class represents the abstracted implementation of a network client module.
 
     In the brain analogy, dendrites receive signals
     from other neurons (in this case, network servers or axons), and the Dendrite class here is designed
@@ -96,7 +97,7 @@ class dendrite(torch.nn.Module):
     """
 
     def __init__(
-        self, wallet: Optional[Union[bittensor.wallet, bittensor.keypair]] = None
+        self, wallet: Optional[Union[bittensor.wallet, bittensor.Keypair]] = None
     ):
         """
         Initializes the Dendrite object, setting up essential properties.
@@ -106,7 +107,7 @@ class dendrite(torch.nn.Module):
                 The user's wallet or keypair used for signing messages. Defaults to ``None``, in which case a new :func:`bittensor.wallet().hotkey` is generated and used.
         """
         # Initialize the parent class
-        super(dendrite, self).__init__()
+        super(DendriteMixin, self).__init__()
 
         # Unique identifier for the instance
         self.uuid = str(uuid.uuid1())
@@ -121,7 +122,7 @@ class dendrite(torch.nn.Module):
 
         self.synapse_history: list = []
 
-        self._session: aiohttp.ClientSession = None
+        self._session: Optional[aiohttp.ClientSession] = None
 
     @property
     async def session(self) -> aiohttp.ClientSession:
@@ -291,11 +292,8 @@ class dendrite(torch.nn.Module):
 
     def query(
         self, *args, **kwargs
-    ) -> Union[
-        bittensor.Synapse,
-        List[bittensor.Synapse],
-        bittensor.StreamingSynapse,
-        List[bittensor.StreamingSynapse],
+    ) -> List[
+        Union[AsyncGenerator[Any, Any], bittensor.Synapse, bittensor.StreamingSynapse]
     ]:
         """
         Makes a synchronous request to multiple target Axons and returns the server responses.
@@ -315,14 +313,14 @@ class dendrite(torch.nn.Module):
         try:
             loop = asyncio.get_event_loop()
             result = loop.run_until_complete(self.forward(*args, **kwargs))
-        except:
+        except Exception:
             new_loop = asyncio.new_event_loop()
             asyncio.set_event_loop(new_loop)
             result = loop.run_until_complete(self.forward(*args, **kwargs))
             new_loop.close()
         finally:
             self.close_session()
-            return result
+            return result  # type: ignore
 
     async def forward(
         self,
@@ -336,7 +334,7 @@ class dendrite(torch.nn.Module):
         run_async: bool = True,
         streaming: bool = False,
     ) -> List[
-        Union[AsyncGenerator[Any], bittensor.Synapse, bittensor.StreamingSynapse]
+        Union[AsyncGenerator[Any, Any], bittensor.Synapse, bittensor.StreamingSynapse]
     ]:
         """
         Asynchronously sends requests to one or multiple Axons and collates their responses.
@@ -402,7 +400,9 @@ class dendrite(torch.nn.Module):
 
         async def query_all_axons(
             is_stream: bool,
-        ) -> Union[AsyncGenerator[Any], bittenst.Synapse, bittensor.StreamingSynapse]:
+        ) -> Union[
+            AsyncGenerator[Any, Any], bittensor.Synapse, bittensor.StreamingSynapse
+        ]:
             """
             Handles the processing of requests to all targeted axons, accommodating both streaming and non-streaming responses.
 
@@ -423,7 +423,7 @@ class dendrite(torch.nn.Module):
             async def single_axon_response(
                 target_axon,
             ) -> Union[
-                AsyncGenerator[Any], bittenst.Synapse, bittensor.StreamingSynapse
+                AsyncGenerator[Any, Any], bittensor.Synapse, bittensor.StreamingSynapse
             ]:
                 """
                 Manages the request and response process for a single axon, supporting both streaming and non-streaming modes.
@@ -446,7 +446,7 @@ class dendrite(torch.nn.Module):
                     # If in streaming mode, return the async_generator
                     return self.call_stream(
                         target_axon=target_axon,
-                        synapse=synapse.copy(),
+                        synapse=synapse.model_copy(),  # type: ignore
                         timeout=timeout,
                         deserialize=deserialize,
                     )
@@ -454,7 +454,7 @@ class dendrite(torch.nn.Module):
                     # If not in streaming mode, simply call the axon and get the response.
                     return await self.call(
                         target_axon=target_axon,
-                        synapse=synapse.copy(),
+                        synapse=synapse.model_copy(),  # type: ignore
                         timeout=timeout,
                         deserialize=deserialize,
                     )
@@ -463,19 +463,16 @@ class dendrite(torch.nn.Module):
             if not run_async:
                 return [
                     await single_axon_response(target_axon) for target_axon in axons
-                ]
+                ]  # type: ignore
             # If run_async flag is True, get responses concurrently using asyncio.gather().
             return await asyncio.gather(
                 *(single_axon_response(target_axon) for target_axon in axons)
-            )
+            )  # type: ignore
 
         # Get responses for all axons.
         responses = await query_all_axons(streaming)
         # Return the single response if only one axon was targeted, else return all responses
-        if len(responses) == 1 and not is_list:
-            return responses[0]
-        else:
-            return responses
+        return responses[0] if len(responses) == 1 and not is_list else responses  # type: ignore
 
     async def call(
         self,
@@ -524,8 +521,8 @@ class dendrite(torch.nn.Module):
             async with (await self.session).post(
                 url,
                 headers=synapse.to_headers(),
-                json=synapse.dict(),
-                timeout=timeout,
+                json=synapse.model_dump(),
+                timeout=ClientTimeout(total=timeout),
             ) as response:
                 # Extract the JSON response from the server
                 json_response = await response.json()
@@ -533,7 +530,7 @@ class dendrite(torch.nn.Module):
                 self.process_server_response(response, json_response, synapse)
 
             # Set process time and log the response
-            synapse.dendrite.process_time = str(time.time() - start_time)
+            synapse.dendrite.process_time = str(time.time() - start_time)  # type: ignore
 
         except Exception as e:
             self._handle_request_errors(synapse, request_name, e)
@@ -555,10 +552,10 @@ class dendrite(torch.nn.Module):
     async def call_stream(
         self,
         target_axon: Union[bittensor.AxonInfo, bittensor.axon],
-        synapse: bittensor.Synapse = bittensor.Synapse(),
+        synapse: bittensor.StreamingSynapse = bittensor.Synapse(),  # type: ignore
         timeout: float = 12.0,
         deserialize: bool = True,
-    ) -> AsyncGenerator[Any]:
+    ) -> AsyncGenerator[Any, Any]:
         """
         Sends a request to a specified Axon and yields streaming responses.
 
@@ -596,7 +593,7 @@ class dendrite(torch.nn.Module):
         url = f"http://{endpoint}/{request_name}"
 
         # Preprocess synapse for making a request
-        synapse = self.preprocess_synapse_for_request(target_axon, synapse, timeout)
+        synapse = self.preprocess_synapse_for_request(target_axon, synapse, timeout)  # type: ignore
 
         try:
             # Log outgoing request
@@ -606,11 +603,11 @@ class dendrite(torch.nn.Module):
             async with (await self.session).post(
                 url,
                 headers=synapse.to_headers(),
-                json=synapse.dict(),
-                timeout=timeout,
+                json=synapse.model_dump(),
+                timeout=ClientTimeout(total=timeout),
             ) as response:
                 # Use synapse subclass' process_streaming_response method to yield the response chunks
-                async for chunk in synapse.process_streaming_response(response):
+                async for chunk in synapse.process_streaming_response(response):  # type: ignore
                     yield chunk  # Yield each chunk as it's processed
                 json_response = synapse.extract_response_json(response)
 
@@ -618,7 +615,7 @@ class dendrite(torch.nn.Module):
                 self.process_server_response(response, json_response, synapse)
 
             # Set process time and log the response
-            synapse.dendrite.process_time = str(time.time() - start_time)
+            synapse.dendrite.process_time = str(time.time() - start_time)  # type: ignore
 
         except Exception as e:
             self._handle_request_errors(synapse, request_name, e)
@@ -657,26 +654,20 @@ class dendrite(torch.nn.Module):
             bittensor.Synapse: The preprocessed synapse.
         """
         # Set the timeout for the synapse
-        synapse.timeout = str(timeout)
-
-        # Build the Dendrite headers using the local system's details
+        synapse.timeout = timeout
         synapse.dendrite = bittensor.TerminalInfo(
-            **{
-                "ip": str(self.external_ip),
-                "version": str(bittensor.__version_as_int__),
-                "nonce": f"{time.monotonic_ns()}",
-                "uuid": str(self.uuid),
-                "hotkey": str(self.keypair.ss58_address),
-            }
+            ip=self.external_ip,
+            version=bittensor.__version_as_int__,
+            nonce=time.time_ns(),
+            uuid=self.uuid,
+            hotkey=self.keypair.ss58_address,
         )
 
         # Build the Axon headers using the target axon's details
         synapse.axon = bittensor.TerminalInfo(
-            **{
-                "ip": str(target_axon_info.ip),
-                "port": str(target_axon_info.port),
-                "hotkey": str(target_axon_info.hotkey),
-            }
+            ip=target_axon_info.ip,
+            port=target_axon_info.port,
+            hotkey=target_axon_info.hotkey,
         )
 
         # Sign the request using the dendrite, axon info, and the synapse body hash
@@ -687,7 +678,7 @@ class dendrite(torch.nn.Module):
 
     def process_server_response(
         self,
-        server_response: Response,
+        server_response: aiohttp.ClientResponse,
         json_response: dict,
         local_synapse: bittensor.Synapse,
     ):
@@ -707,39 +698,48 @@ class dendrite(torch.nn.Module):
         if server_response.status == 200:
             # If the response is successful, overwrite local synapse state with
             # server's state only if the protocol allows mutation. To prevent overwrites,
-            # the protocol must set allow_mutation = False
+            # the protocol must set Frozen = True
             server_synapse = local_synapse.__class__(**json_response)
-            for key in local_synapse.dict().keys():
+            for key in local_synapse.model_dump().keys():
                 try:
                     # Set the attribute in the local synapse from the corresponding
                     # attribute in the server synapse
                     setattr(local_synapse, key, getattr(server_synapse, key))
-                except:
+                except Exception as e:
+                    bittensor.logging.info(
+                        f"Ignoring error when setting attribute: {e}"
+                    )
                     # Ignore errors during attribute setting
                     pass
+        else:
+            # If the server responded with an error, update the local synapse state
+            if local_synapse.axon is None:
+                local_synapse.axon = bittensor.TerminalInfo()
+            local_synapse.axon.status_code = server_response.status
+            local_synapse.axon.status_message = json_response.get("message")
 
         # Extract server headers and overwrite None values in local synapse headers
-        server_headers = bittensor.Synapse.from_headers(server_response.headers)
+        server_headers = bittensor.Synapse.from_headers(server_response.headers)  # type: ignore
 
         # Merge dendrite headers
         local_synapse.dendrite.__dict__.update(
             {
-                **local_synapse.dendrite.dict(exclude_none=True),
-                **server_headers.dendrite.dict(exclude_none=True),
+                **local_synapse.dendrite.model_dump(exclude_none=True),  # type: ignore
+                **server_headers.dendrite.model_dump(exclude_none=True),  # type: ignore
             }
         )
 
         # Merge axon headers
         local_synapse.axon.__dict__.update(
             {
-                **local_synapse.axon.dict(exclude_none=True),
-                **server_headers.axon.dict(exclude_none=True),
+                **local_synapse.axon.model_dump(exclude_none=True),  # type: ignore
+                **server_headers.axon.model_dump(exclude_none=True),  # type: ignore
             }
         )
 
         # Update the status code and status message of the dendrite to match the axon
-        local_synapse.dendrite.status_code = local_synapse.axon.status_code
-        local_synapse.dendrite.status_message = local_synapse.axon.status_message
+        local_synapse.dendrite.status_code = local_synapse.axon.status_code  # type: ignore
+        local_synapse.dendrite.status_message = local_synapse.axon.status_message  # type: ignore
 
     def __str__(self) -> str:
         """
@@ -814,4 +814,25 @@ class dendrite(torch.nn.Module):
             # ... some operations ...
             del dendrite  # This will implicitly invoke the __del__ method and close the session.
         """
-        asyncio.run(self.aclose_session())
+        self.close_session()
+
+
+# For back-compatibility with torch
+BaseModel: Union["torch.nn.Module", object] = torch.nn.Module if use_torch() else object
+
+
+class dendrite(DendriteMixin, BaseModel):  # type: ignore
+    def __init__(
+        self, wallet: Optional[Union[bittensor.wallet, bittensor.Keypair]] = None
+    ):
+        if use_torch():
+            torch.nn.Module.__init__(self)
+        DendriteMixin.__init__(self, wallet)
+
+
+if not use_torch():
+
+    async def call(self, *args, **kwargs):
+        return await self.forward(*args, **kwargs)
+
+    dendrite.__call__ = call

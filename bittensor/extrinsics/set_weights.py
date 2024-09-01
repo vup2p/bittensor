@@ -18,69 +18,24 @@
 
 import bittensor
 
-import torch
+import logging
+import numpy as np
+from numpy.typing import NDArray
 from rich.prompt import Confirm
 from typing import Union, Tuple
 import bittensor.utils.weight_utils as weight_utils
-import multiprocessing
+from bittensor.btlogging.defines import BITTENSOR_LOGGER_NAME
+from bittensor.utils.registration import torch, use_torch
 
-from loguru import logger
-
-logger = logger.opt(colors=True)
-
-
-def ttl_set_weights_extrinsic(
-    subtensor: "bittensor.subtensor",
-    wallet: "bittensor.wallet",
-    netuid: int,
-    uids: Union[torch.LongTensor, list],
-    weights: Union[torch.FloatTensor, list],
-    version_key: int = 0,
-    wait_for_inclusion: bool = False,
-    wait_for_finalization: bool = False,
-    prompt: bool = False,
-    ttl: int = 100,
-) -> Tuple[bool, str]:
-    r"""Sets the given weights and values on chain for wallet hotkey account."""
-
-    def target(queue, *args):
-        result = set_weights_extrinsic(*args)
-        queue.put(result)
-
-    queue = multiprocessing.Queue()
-
-    args = (
-        queue,
-        subtensor.chain_endpoint,
-        wallet,
-        netuid,
-        uids,
-        weights,
-        version_key,
-        wait_for_inclusion,
-        wait_for_finalization,
-        prompt,
-    )
-    process = multiprocessing.Process(target=target, args=args)
-    process.start()
-    process.join(timeout=ttl)
-    success, error_message = False, "Timeout or unknown error"
-
-    if process.is_alive():
-        process.terminate()
-        process.join()
-    else:
-        success, error_message = queue.get()
-
-    return success, error_message
+logger = logging.getLogger(BITTENSOR_LOGGER_NAME)
 
 
 def set_weights_extrinsic(
-    subtensor_endpoint: str,
+    subtensor: "bittensor.subtensor",
     wallet: "bittensor.wallet",
     netuid: int,
-    uids: Union[torch.LongTensor, list],
-    weights: Union[torch.FloatTensor, list],
+    uids: Union[NDArray[np.int64], "torch.LongTensor", list],
+    weights: Union[NDArray[np.float32], "torch.FloatTensor", list],
     version_key: int = 0,
     wait_for_inclusion: bool = False,
     wait_for_finalization: bool = False,
@@ -89,15 +44,15 @@ def set_weights_extrinsic(
     r"""Sets the given weights and values on chain for wallet hotkey account.
 
     Args:
-        subtensor_endpoint (bittensor.subtensor):
+        subtensor (bittensor.subtensor):
             Subtensor endpoint to use.
         wallet (bittensor.wallet):
             Bittensor wallet object.
         netuid (int):
             The ``netuid`` of the subnet to set weights for.
-        uids (Union[torch.LongTensor, list]):
+        uids (Union[NDArray[np.int64], torch.LongTensor, list]):
             The ``uint64`` uids of destination neurons.
-        weights ( Union[torch.FloatTensor, list]):
+        weights (Union[NDArray[np.float32], torch.FloatTensor, list]):
             The weights to set. These must be ``float`` s and correspond to the passed ``uid`` s.
         version_key (int):
             The version key of the validator.
@@ -111,13 +66,17 @@ def set_weights_extrinsic(
         success (bool):
             Flag is ``true`` if extrinsic was finalized or uncluded in the block. If we did not wait for finalization / inclusion, the response is ``true``.
     """
-    subtensor = bittensor.subtensor(subtensor_endpoint)
-
     # First convert types.
-    if isinstance(uids, list):
-        uids = torch.tensor(uids, dtype=torch.int64)
-    if isinstance(weights, list):
-        weights = torch.tensor(weights, dtype=torch.float32)
+    if use_torch():
+        if isinstance(uids, list):
+            uids = torch.tensor(uids, dtype=torch.int64)
+        if isinstance(weights, list):
+            weights = torch.tensor(weights, dtype=torch.float32)
+    else:
+        if isinstance(uids, list):
+            uids = np.array(uids, dtype=np.int64)
+        if isinstance(weights, list):
+            weights = np.array(weights, dtype=np.float32)
 
     # Reformat and normalize.
     weight_uids, weight_vals = weight_utils.convert_weights_and_uids_for_emit(
@@ -148,36 +107,30 @@ def set_weights_extrinsic(
             )
 
             if not wait_for_finalization and not wait_for_inclusion:
-                return (
-                    True,
-                    "Not waiting for finalization or inclusion. Assume successful.",
-                )
+                return True, "Not waiting for finalization or inclusion."
 
-            if success == True:
+            if success is True:
                 bittensor.__console__.print(
                     ":white_heavy_check_mark: [green]Finalized[/green]"
                 )
                 bittensor.logging.success(
                     prefix="Set weights",
-                    sufix="<green>Finalized: </green>" + str(success),
+                    suffix="<green>Finalized: </green>" + str(success),
                 )
-                return True, "Success."
+                return True, "Successfully set weights and Finalized."
             else:
-                bittensor.__console__.print(
-                    ":cross_mark: [red]Failed[/red]: error:{}".format(error_message)
-                )
-                bittensor.logging.warning(
+                bittensor.logging.error(
+                    msg=error_message,
                     prefix="Set weights",
-                    sufix="<red>Failed: </red>" + str(error_message),
+                    suffix="<red>Failed: </red>",
                 )
-                return False, str(error_message)
+                return False, error_message
 
         except Exception as e:
-            # TODO( devs ): lets remove all of the bittensor.__console__ calls and replace with loguru.
             bittensor.__console__.print(
                 ":cross_mark: [red]Failed[/red]: error:{}".format(e)
             )
             bittensor.logging.warning(
-                prefix="Set weights", sufix="<red>Failed: </red>" + str(e)
+                prefix="Set weights", suffix="<red>Failed: </red>" + str(e)
             )
             return False, str(e)

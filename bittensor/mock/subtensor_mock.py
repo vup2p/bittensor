@@ -34,8 +34,8 @@ from ..chain_data import (
     SubnetInfo,
     AxonInfo,
 )
-from ..errors import *
-from ..subtensor import subtensor
+from ..errors import ChainQueryError
+from ..subtensor import Subtensor
 from ..utils import RAOPERTAO, U16_NORMALIZED_FLOAT
 from ..utils.balance import Balance
 from ..utils.registration import POWSolution
@@ -196,7 +196,7 @@ class MockChainState(TypedDict):
     SubtensorModule: MockSubtensorState
 
 
-class MockSubtensor(subtensor):
+class MockSubtensor(Subtensor):
     """
     A Mock Subtensor class for running tests.
     This should mock only methods that make queries to the chain.
@@ -270,6 +270,8 @@ class MockSubtensor(subtensor):
                     "Prometheus": {},
                     "SubnetOwner": {},
                     "Commits": {},
+                    "AdjustmentAlpha": {},
+                    "BondsMovingAverage": {},
                 },
             }
 
@@ -328,6 +330,7 @@ class MockSubtensor(subtensor):
             subtensor_state["BlocksSinceLastStep"][netuid][0] = 0
             subtensor_state["Tempo"][netuid] = {}
             subtensor_state["Tempo"][netuid][0] = 99
+
             # subtensor_state['NetworkConnect'][netuid] = {}
             # subtensor_state['NetworkConnect'][netuid][0] = {}
             subtensor_state["EmissionValues"][netuid] = {}
@@ -364,6 +367,11 @@ class MockSubtensor(subtensor):
             subtensor_state["NetworksAdded"][netuid] = {}
             subtensor_state["NetworksAdded"][netuid][0] = True
 
+            subtensor_state["AdjustmentAlpha"][netuid] = {}
+            subtensor_state["AdjustmentAlpha"][netuid][0] = 1000
+
+            subtensor_state["BondsMovingAverage"][netuid] = {}
+            subtensor_state["BondsMovingAverage"][netuid][0] = 1000
         else:
             raise Exception("Subnet already exists")
 
@@ -422,9 +430,9 @@ class MockSubtensor(subtensor):
             subtensor_state["Active"][netuid][uid][self.block_number] = True
 
             subtensor_state["LastUpdate"][netuid][uid] = {}
-            subtensor_state["LastUpdate"][netuid][uid][
+            subtensor_state["LastUpdate"][netuid][uid][self.block_number] = (
                 self.block_number
-            ] = self.block_number
+            )
 
             subtensor_state["Rank"][netuid][uid] = {}
             subtensor_state["Rank"][netuid][uid][self.block_number] = 0.0
@@ -748,7 +756,7 @@ class MockSubtensor(subtensor):
         self, uid: int, netuid: int, block: Optional[int] = None
     ) -> Optional[NeuronInfo]:
         if uid is None:
-            return NeuronInfo._null_neuron()
+            return NeuronInfo.get_null_neuron()
 
         if block:
             if self.block_number < block:
@@ -1056,9 +1064,9 @@ class MockSubtensor(subtensor):
 
         else:
             subtensor_state["Delegates"][hotkey_ss58] = {}
-            subtensor_state["Delegates"][hotkey_ss58][
-                self.block_number
-            ] = 0.18  # Constant for now
+            subtensor_state["Delegates"][hotkey_ss58][self.block_number] = (
+                0.18  # Constant for now
+            )
 
             return True
 
@@ -1181,9 +1189,9 @@ class MockSubtensor(subtensor):
         if not wallet.coldkeypub.ss58_address in stake_state[hotkey_ss58]:
             stake_state[hotkey_ss58][wallet.coldkeypub.ss58_address] = {}
 
-        stake_state[hotkey_ss58][wallet.coldkeypub.ss58_address][
-            self.block_number
-        ] = amount.rao
+        stake_state[hotkey_ss58][wallet.coldkeypub.ss58_address][self.block_number] = (
+            amount.rao
+        )
 
         # Add to total_stake storage
         subtensor_state["TotalStake"][self.block_number] = (
@@ -1267,9 +1275,9 @@ class MockSubtensor(subtensor):
         total_hotkey_stake_state = subtensor_state["TotalHotkeyStake"]
         if not hotkey_ss58 in total_hotkey_stake_state:
             total_hotkey_stake_state[hotkey_ss58] = {}
-            total_hotkey_stake_state[hotkey_ss58][
-                self.block_number
-            ] = 0  # Shouldn't happen
+            total_hotkey_stake_state[hotkey_ss58][self.block_number] = (
+                0  # Shouldn't happen
+            )
 
         total_coldkey_stake_state = subtensor_state["TotalColdkeyStake"]
         if not wallet.coldkeypub.ss58_address in total_coldkey_stake_state:
@@ -1296,6 +1304,18 @@ class MockSubtensor(subtensor):
         ][self.block_number] = (bal + amount).rao
 
         return True
+
+    @staticmethod
+    def min_required_stake():
+        """
+        As the minimum required stake may change, this method allows us to dynamically
+        update the amount in the mock without updating the tests
+        """
+        # valid minimum threshold as of 2024/05/01
+        return 100_000_000  # RAO
+
+    def get_minimum_required_stake(self):
+        return Balance.from_rao(self.min_required_stake())
 
     def get_delegate_by_hotkey(
         self, hotkey_ss58: str, block: Optional[int] = None

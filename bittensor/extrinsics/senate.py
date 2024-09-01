@@ -16,12 +16,12 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-# Imports
-import bittensor
-
 import time
+
 from rich.prompt import Confirm
-from ..errors import *
+
+import bittensor
+from bittensor.utils import format_error_message
 
 
 def register_senate_extrinsic(
@@ -79,9 +79,7 @@ def register_senate_extrinsic(
             response.process_events()
             if not response.is_success:
                 bittensor.__console__.print(
-                    ":cross_mark: [red]Failed[/red]: error:{}".format(
-                        response.error_message
-                    )
+                    f":cross_mark: [red]Failed[/red]:{format_error_message(response.error_message)}"
                 )
                 time.sleep(0.5)
 
@@ -156,9 +154,7 @@ def leave_senate_extrinsic(
             response.process_events()
             if not response.is_success:
                 bittensor.__console__.print(
-                    ":cross_mark: [red]Failed[/red]: error:{}".format(
-                        response.error_message
-                    )
+                    f":cross_mark: [red]Failed[/red]: {format_error_message(response.error_message)}"
                 )
                 time.sleep(0.5)
 
@@ -188,7 +184,7 @@ def vote_senate_extrinsic(
     wait_for_finalization: bool = True,
     prompt: bool = False,
 ) -> bool:
-    r"""Removes the wallet from chain for senate voting.
+    r"""Votes ayes or nays on proposals.
 
     Args:
         wallet (bittensor.wallet):
@@ -241,9 +237,7 @@ def vote_senate_extrinsic(
             response.process_events()
             if not response.is_success:
                 bittensor.__console__.print(
-                    ":cross_mark: [red]Failed[/red]: error:{}".format(
-                        response.error_message
-                    )
+                    f":cross_mark: [red]Failed[/red]: {format_error_message(response.error_message)}"
                 )
                 time.sleep(0.5)
 
