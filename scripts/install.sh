@@ -206,7 +206,7 @@ if [[ "$OS" == "Linux" ]]; then
     linux_install_bittensor
 
     ohai "Would you like to increase the ulimit? This will allow your miner to run for a longer time"
-    wait_for_user
+
     linux_increase_ulimit
     echo ""
     echo ""
